@@ -1,0 +1,61 @@
+#include <WiFi.h>
+#include <WebServer.h>
+#include <WiFiManager.h>
+
+#define BUTTON_PIN 4
+#define HOLD_DURATION_MS 5000  // 5-second hold required
+
+WebServer server(80);
+WiFiManager wm;
+
+unsigned long buttonPressStart = 0;
+bool buttonHeld = false;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+
+  // Try to connect using stored credentials
+  if (!wm.autoConnect("ESP32_Config", "esp32password")) {
+    Serial.println("WiFi not connected. Waiting for button press to re-provision...");
+  } else {
+    Serial.println("WiFi connected.");
+    Serial.print("Connected! IP address: ");
+    Serial.println(WiFi.localIP());
+  }
+
+  server.on("/", HTTP_GET, []() {
+    server.send(200, "text/html", "<h1>Hello from ESP32!</h1><p>WiFi is working!</p><p>Hold button for 5s to reset WiFi.</p>");
+  });
+  server.begin();
+  Serial.println("Web server started!");
+}
+
+void loop() {
+  server.handleClient();
+
+  // Button hold detection logic
+  if (digitalRead(BUTTON_PIN) == LOW) {  // Button pressed
+    if (!buttonHeld) {
+      buttonPressStart = millis();
+      buttonHeld = true;
+      Serial.println("Button pressed - hold for 5 seconds to reset");
+    }
+    
+    // Check if held for required duration
+    if (buttonHeld && (millis() - buttonPressStart >= HOLD_DURATION_MS)) {
+      Serial.println("5-second hold detected! Resetting WiFi credentials...");
+      wm.resetSettings();
+      delay(100);
+      ESP.restart();
+    }
+  } else {  // Button not pressed
+    if (buttonHeld) {
+      // Button released before 5 seconds
+      Serial.println("Button released early");
+      buttonHeld = false;
+    }
+  }
+}
+
+
